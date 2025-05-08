@@ -3,7 +3,6 @@ let isMonitoring = false;
 let monitoringInterval = null;
 let autoCheckoutEnabled = false;
 let monitoredProducts = [];
-let monitoringSettings = {};
 
 // 監聽來自彈出視窗的訊息
 chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
@@ -37,7 +36,6 @@ function startMonitoring(settings) {
     stopMonitoring();
   }
   
-  monitoringSettings = settings || {};
   isMonitoring = true;
   
   // 儲存監控狀態
@@ -110,10 +108,7 @@ function checkAllProductsStock() {
   
   // 對每個產品，開啟標籤頁檢查庫存
   monitoredProducts.forEach(product => {
-    // 檢查產品是否符合設定的過濾條件
-    if (isProductMatchingFilters(product)) {
-      checkProductStock(product);
-    }
+    checkProductStock(product);
   });
 }
 
@@ -145,41 +140,10 @@ function checkProductStock(product) {
   });
 }
 
-// 檢查產品是否符合過濾條件
-function isProductMatchingFilters(product) {
-  if (!monitoringSettings) {
-    return true;
-  }
-  
-  // 檢查產品名稱
-  if (monitoringSettings.targetProduct && 
-      !product.name.toLowerCase().includes(monitoringSettings.targetProduct.toLowerCase())) {
-    return false;
-  }
-  
-  // 檢查尺寸
-  if (monitoringSettings.size && 
-      product.sizes && 
-      !product.sizes.includes(monitoringSettings.size)) {
-    return false;
-  }
-  
-  // 檢查價格
-  if (monitoringSettings.maxPrice) {
-    const price = parseFloat(product.price.replace(/[^0-9.]/g, ''));
-    if (price > monitoringSettings.maxPrice) {
-      return false;
-    }
-  }
-  
-  return true;
-}
-
 // 保存監控狀態
 function saveMonitoringState() {
   chrome.storage.sync.set({
-    isMonitoring: isMonitoring,
-    monitoringSettings: monitoringSettings
+    isMonitoring: isMonitoring
   });
 }
 
