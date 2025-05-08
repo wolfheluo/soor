@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', function() {
       updateStatus(message.message);
       // 每次狀態更新時重新檢查監控商品數量
       updateMonitoredProductsCount();
+      // 同時更新開關狀態
+      updateSwitchStates();
     }
     
     // 始終回傳true以表示非同步回應
@@ -60,6 +62,16 @@ document.addEventListener('DOMContentLoaded', function() {
     chrome.storage.sync.get('monitoredProducts', function(data) {
       const products = data.monitoredProducts || [];
       monitoredCount.textContent = `監控中商品：${products.length} 件`;
+    });
+  }
+  
+  // 更新開關狀態
+  function updateSwitchStates() {
+    chrome.runtime.sendMessage({type: 'checkMonitoringStatus'}, function(response) {
+      if (response) {
+        monitorStockToggle.checked = response.isMonitoring;
+        autoCheckoutToggle.checked = response.autoCheckout;
+      }
     });
   }
   
@@ -113,15 +125,14 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // 載入初始設定
   function loadInitialSettings() {
-    // 確保監控開關和自動結帳開關預設為關閉
+    // 確保監控開關和自動結帳開關初始為關閉
     monitorStockToggle.checked = false;
     autoCheckoutToggle.checked = false;
     
-    // 載入自動結帳設定 (僅用於顯示歷史設定，每次都會預設為關閉)
-    chrome.storage.sync.get('autoCheckout', function(data) {
-      // 即使之前的設定是開啟的，我們仍然每次都設為關閉
-      autoCheckoutToggle.checked = false;
-    });
+    // 從背景腳本獲取實際的監控狀態
+    updateSwitchStates();
+    
+    updateStatus('系統已就緒，開關預設為關閉狀態');
   }
   
   // 更新狀態訊息

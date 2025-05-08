@@ -19,6 +19,12 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
   } else if (message.type === 'addProductToMonitor') {
     addProductToMonitor(message.product);
     sendResponse({success: true});
+  } else if (message.type === 'checkMonitoringStatus') {
+    // 新增一個檢查監控狀態的處理
+    sendResponse({
+      isMonitoring: isMonitoring,
+      autoCheckout: autoCheckoutEnabled
+    });
   }
   
   // 回傳true表示將非同步回應
@@ -192,20 +198,19 @@ function sendStatusUpdate(message) {
 
 // 初始化: 載入設定和監控狀態
 function initialize() {
-  chrome.storage.sync.get(['isMonitoring', 'autoCheckout', 'monitoredProducts', 'monitoringSettings'], function(data) {
-    // 載入自動結帳狀態
-    autoCheckoutEnabled = data.autoCheckout || false;
-    
+  chrome.storage.sync.get(['monitoredProducts'], function(data) {
     // 載入監控產品列表
     monitoredProducts = data.monitoredProducts || [];
     
-    // 載入監控設定
-    monitoringSettings = data.monitoringSettings || {};
+    // 監控狀態和自動結帳始終從關閉狀態開始，不再從儲存空間恢復
+    isMonitoring = false;
+    autoCheckoutEnabled = false;
     
-    // 如果之前是在監控狀態，則恢復監控
-    if (data.isMonitoring) {
-      startMonitoring(monitoringSettings);
-    }
+    // 確保儲存的狀態也是關閉的
+    chrome.storage.sync.set({
+      isMonitoring: false,
+      autoCheckout: false
+    });
   });
 }
 
