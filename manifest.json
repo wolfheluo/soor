@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Soorploom Clothier Helper",
+  "version": "1.0",
+  "description": "自動抓取 soorploomclothier.com 網站的商品資訊並提供自動購物功能",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://soorploomclothier.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "images/icon16.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
+  },
+  "background": {
+    "service_worker": "js/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://soorploomclothier.com/*"],
+      "js": ["js/content.js"]
+    }
+  ]
+}
