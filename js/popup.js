@@ -177,8 +177,7 @@ document.addEventListener('DOMContentLoaded', function() {
       productList.appendChild(productItem);
     });
   }
-  
-  // 移除監控商品
+    // 移除監控商品
   function removeMonitoredProduct(product) {
     chrome.storage.sync.get('monitoredProducts', function(data) {
       const products = data.monitoredProducts || [];
@@ -186,8 +185,11 @@ document.addEventListener('DOMContentLoaded', function() {
       
       chrome.storage.sync.set({monitoredProducts: updatedProducts}, function() {
         updateStatus(`已移除監控商品: ${product.name}`);
-        viewMonitoredProducts(); // 重新顯示更新後的列表
-        updateMonitoredProductsCount(); // 更新數量顯示
+        // 通知背景腳本產品已被移除
+        chrome.runtime.sendMessage({type: 'productRemoved'}, function() {
+          viewMonitoredProducts(); // 重新顯示更新後的列表
+          updateMonitoredProductsCount(); // 更新數量顯示
+        });
       });
     });
   }

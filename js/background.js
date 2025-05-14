@@ -24,6 +24,10 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
       isMonitoring: isMonitoring,
       autoCheckout: autoCheckoutEnabled
     });
+  } else if (message.type === 'productRemoved') {
+    // 處理產品被移除的事件
+    loadMonitoredProducts();
+    sendResponse({success: true});
   }
   
   // 回傳true表示將非同步回應
@@ -100,15 +104,18 @@ function addProductToMonitor(product) {
 
 // 檢查所有產品庫存
 function checkAllProductsStock() {
-  if (!isMonitoring || monitoredProducts.length === 0) {
-    return;
-  }
-  
-  sendStatusUpdate(`開始檢查 ${monitoredProducts.length} 個產品的庫存狀態`);
-  
-  // 對每個產品，開啟標籤頁檢查庫存
-  monitoredProducts.forEach(product => {
-    checkProductStock(product);
+  // 先重新載入監控產品列表，確保使用最新資料
+  loadMonitoredProducts(function() {
+    if (!isMonitoring || monitoredProducts.length === 0) {
+      return;
+    }
+    
+    sendStatusUpdate(`開始檢查 ${monitoredProducts.length} 個產品的庫存狀態`);
+    
+    // 對每個產品，開啟標籤頁檢查庫存
+    monitoredProducts.forEach(product => {
+      checkProductStock(product);
+    });
   });
 }
 
@@ -152,6 +159,16 @@ function saveMonitoredProducts() {
   chrome.storage.sync.set({monitoredProducts: monitoredProducts});
 }
 
+// 載入監控產品列表
+function loadMonitoredProducts(callback) {
+  chrome.storage.sync.get(['monitoredProducts'], function(data) {
+    monitoredProducts = data.monitoredProducts || [];
+    if (callback && typeof callback === 'function') {
+      callback();
+    }
+  });
+}
+
 // 發送狀態更新訊息
 function sendStatusUpdate(message) {
   chrome.runtime.sendMessage({
@@ -162,10 +179,8 @@ function sendStatusUpdate(message) {
 
 // 初始化: 載入設定和監控狀態
 function initialize() {
-  chrome.storage.sync.get(['monitoredProducts'], function(data) {
-    // 載入監控產品列表
-    monitoredProducts = data.monitoredProducts || [];
-    
+  // 載入監控產品列表
+  loadMonitoredProducts(function() {
     // 監控狀態和自動結帳始終從關閉狀態開始，不再從儲存空間恢復
     isMonitoring = false;
     autoCheckoutEnabled = false;
