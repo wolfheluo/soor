@@ -174,10 +174,9 @@ async function extractProductInfo() {
       // 找到產品價格 - 更新選擇器以匹配網站結構
     const priceElement = document.querySelector('.theme-money, .price, .product-price, [data-product-price]');
     const price = priceElement ? priceElement.textContent.trim() : '價格未知';
-    
-    // 找到產品庫存狀態 - 檢查「加入購物車」按鈕是否存在且未被禁用
+      // 找到產品庫存狀態 - 檢查「加入購物車」按鈕是否存在且未被禁用
     let inStock = false;
-    const addToCartButton = document.querySelector('button[name="add"], [data-add-to-cart], .add-to-cart, #AddToCart, .product-form__cart-submit, [data-button-action="add-to-cart"]');
+    const addToCartButton = document.querySelector('button[type="submit"][name="add"], button[name="add"], [data-add-to-cart], .add-to-cart, #AddToCart, .product-form__cart-submit, [data-button-action="add-to-cart"]');
     if (addToCartButton && !addToCartButton.disabled) {
       inStock = true;
     }
@@ -460,11 +459,6 @@ async function initiateCheckout(product) {
       return {success: false, message: '正在導航到產品頁面'};
     }
     
-    // 選擇尺寸（如果有）
-    if (product.sizes && product.sizes.length > 0) {
-      selectSize(product.sizes[0]);
-    }
-    
     // 設定購買數量（如果有指定）
     if (product.quantity && product.quantity > 1) {
       setQuantity(product.quantity);
@@ -479,8 +473,8 @@ async function initiateCheckout(product) {
     // 等待購物車更新
     await wait(2000);
     
-    // 點擊"結帳"按鈕或導航到結帳頁面
-    const checkoutResult = await proceedToCheckout();
+    // 點擊"Checkout"按鈕
+    const checkoutResult = clickCheckoutButton();
     if (!checkoutResult.success) {
       return checkoutResult;
     }
@@ -489,10 +483,10 @@ async function initiateCheckout(product) {
     chrome.runtime.sendMessage({
       type: 'checkoutComplete',
       success: true,
-      message: '已成功加入購物車並導航到結帳頁面'
+      message: '已成功加入購物車並點擊結帳按鈕'
     });
     
-    return {success: true, message: '自動結帳流程已完成'};
+    return {success: true, message: '已成功加入購物車並點擊結帳按鈕'};
   } catch (error) {
     console.error('自動結帳過程出錯:', error);
     
@@ -509,13 +503,14 @@ async function initiateCheckout(product) {
 
 // 設定購買數量
 function setQuantity(quantity) {
-  // 尋找數量輸入欄位
-  const quantityInput = document.querySelector('input[name="quantity"], .quantity-input, [data-quantity-input], [aria-label*="quantity"]');
+  // 尋找數量輸入欄位 - 優先使用 Soorploom 特定的選擇器
+  const quantityInput = document.querySelector('input[aria-label="Quantity"], input[id="quantity"], input[name="quantity"], .quantity-input, [data-quantity-input], [aria-label*="quantity"]');
   
   if (quantityInput) {
     // 設定數量
     quantityInput.value = quantity;
     quantityInput.dispatchEvent(new Event('change', {bubbles: true}));
+    quantityInput.dispatchEvent(new Event('input', {bubbles: true}));
     return {success: true, message: `已設定購買數量: ${quantity}`};
   }
   
@@ -567,7 +562,7 @@ function selectSize(size) {
 function clickAddToCart() {
   // 尋找各種可能的"加入購物車"按鈕
   const addToCartButton = document.querySelector(
-    '[name="add"], [data-add-to-cart], .add-to-cart, #AddToCart, .product-form__cart-submit, [data-button-action="add-to-cart"]'
+    'button[type="submit"][name="add"], button[name="add"], [data-add-to-cart], .add-to-cart, #AddToCart, .product-form__cart-submit, [data-button-action="add-to-cart"]'
   );
   
   if (addToCartButton) {
@@ -579,8 +574,29 @@ function clickAddToCart() {
       return {success: false, message: '加入購物車按鈕已被禁用，可能商品已售完'};
     }
   }
+    return {success: false, message: '找不到加入購物車按鈕'};
+}
+
+// 點擊"Checkout"按鈕
+function clickCheckoutButton() {
+  // 尋找各種可能的"Checkout"按鈕或鏈接
+  const checkoutButton = document.querySelector(
+    'a[href="/cart"], a[href*="checkout"], [href="/cart"], [href*="checkout"], .checkout-button, [name="checkout"], [data-action="checkout"]'
+  );
   
-  return {success: false, message: '找不到加入購物車按鈕'};
+  if (checkoutButton) {
+    // 確保按鈕未被禁用
+    if (!checkoutButton.disabled) {
+      checkoutButton.click();
+      return {success: true, message: '已點擊結帳按鈕'};
+    } else {
+      return {success: false, message: '結帳按鈕已被禁用'};
+    }
+  }
+  
+  // 如果找不到按鈕，嘗試直接導航到結帳頁面
+  window.location.href = '/cart';
+  return {success: true, message: '找不到結帳按鈕，正在導航到購物車頁面'};
 }
 
 // 進入結帳頁面
