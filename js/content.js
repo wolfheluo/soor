@@ -255,6 +255,13 @@ async function addCurrentProductToMonitor() {
       return;
     }
     
+    // 獲取用戶輸入的數量
+    const quantityInput = document.getElementById('soorploom-quantity');
+    const quantity = quantityInput ? parseInt(quantityInput.value, 10) : 1;
+    
+    // 將數量添加到商品資訊中
+    product.quantity = quantity;
+    
     // 將商品添加到監控列表
     chrome.runtime.sendMessage({
       type: 'addProductToMonitor',
@@ -268,7 +275,7 @@ async function addCurrentProductToMonitor() {
       updateMonitoredProductsList();
     });
     
-    showNotification(`已將 ${product.name} 添加到監控列表`);
+    showNotification(`已將 ${product.name} (${quantity} 件) 添加到監控列表`);
   } catch (error) {
     console.error('添加商品到監控列表時出錯:', error);
     showNotification('添加商品到監控列表時出錯: ' + error.message);
@@ -420,6 +427,11 @@ async function checkProductStock(product, autoCheckout) {
       return {success: false, message: '無法提取產品信息'};
     }
     
+    // 保留原有的數量資訊或使用預設值
+    if (!currentProduct.quantity && product.quantity) {
+      currentProduct.quantity = product.quantity;
+    }
+    
     // 更新產品信息
     const updatedProduct = {...product, ...currentProduct};
     
@@ -450,6 +462,11 @@ async function initiateCheckout(product) {
     // 選擇尺寸（如果有）
     if (product.sizes && product.sizes.length > 0) {
       selectSize(product.sizes[0]);
+    }
+    
+    // 設定購買數量（如果有指定）
+    if (product.quantity && product.quantity > 1) {
+      setQuantity(product.quantity);
     }
     
     // 點擊"加入購物車"按鈕
@@ -487,6 +504,31 @@ async function initiateCheckout(product) {
     
     return {success: false, error: error.message};
   }
+}
+
+// 設定購買數量
+function setQuantity(quantity) {
+  // 尋找數量輸入欄位
+  const quantityInput = document.querySelector('input[name="quantity"], .quantity-input, [data-quantity-input], [aria-label*="quantity"]');
+  
+  if (quantityInput) {
+    // 設定數量
+    quantityInput.value = quantity;
+    quantityInput.dispatchEvent(new Event('change', {bubbles: true}));
+    return {success: true, message: `已設定購買數量: ${quantity}`};
+  }
+  
+  // 尋找增加數量按鈕
+  const increaseBtn = document.querySelector('.quantity__plus, .qty-plus, [data-quantity="plus"]');
+  if (increaseBtn) {
+    // 預設通常是 1，因此點擊 quantity-1 次
+    for (let i = 1; i < quantity; i++) {
+      increaseBtn.click();
+    }
+    return {success: true, message: `已設定購買數量: ${quantity}`};
+  }
+  
+  return {success: false, message: '找不到數量輸入欄位'};
 }
 
 // 選擇尺寸
@@ -593,40 +635,45 @@ function createActionButtons() {
   `;
   monitorButton.addEventListener('click', addCurrentProductToMonitor);
   
-  // 創建庫存檢查按鈕
-  const checkButton = document.createElement('button');
-  checkButton.textContent = '檢查所有監控商品';
-  checkButton.style.cssText = `
-    padding: 10px 15px;
-    background-color: #2196F3;
-    color: white;
-    border: none;
+  // 創建數量選擇器容器
+  const quantityContainer = document.createElement('div');
+  quantityContainer.style.cssText = `
+    display: flex;
+    align-items: center;
+    background-color: white;
+    padding: 5px;
     border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   `;
-  checkButton.addEventListener('click', checkAllMonitoredProducts);
   
-  // 創建顯示監控列表按鈕
-  const listButton = document.createElement('button');
-  listButton.textContent = '顯示監控列表';
-  listButton.style.cssText = `
-    padding: 10px 15px;
-    background-color: #9C27B0;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
+  // 創建數量標籤
+  const quantityLabel = document.createElement('span');
+  quantityLabel.textContent = '欲購買數量：';
+  quantityLabel.style.cssText = `
+    margin-right: 5px;
     font-weight: bold;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   `;
-  listButton.addEventListener('click', updateMonitoredProductsList);
   
-  // 添加按鈕到容器
+  // 創建數量輸入框
+  const quantityInput = document.createElement('input');
+  quantityInput.type = 'number';
+  quantityInput.min = '1';
+  quantityInput.value = '1';
+  quantityInput.style.cssText = `
+    width: 50px;
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  `;
+  quantityInput.id = 'soorploom-quantity';
+  
+  // 添加元素到數量容器
+  quantityContainer.appendChild(quantityLabel);
+  quantityContainer.appendChild(quantityInput);
+  
+  // 添加按鈕和數量選擇器到容器
   buttonContainer.appendChild(monitorButton);
-  buttonContainer.appendChild(checkButton);
-  buttonContainer.appendChild(listButton);
+  buttonContainer.appendChild(quantityContainer);
   
   // 添加容器到頁面
   document.body.appendChild(buttonContainer);

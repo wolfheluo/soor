@@ -140,8 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const timestamp = new Date().toLocaleTimeString();
     statusBox.innerHTML = `[${timestamp}] ${message}<br>` + statusBox.innerHTML;
   }
-  
-  // 顯示產品列表
+    // 顯示產品列表
   function displayProducts(products) {
     productList.innerHTML = '';
     
@@ -158,6 +157,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <div>庫存狀態: ${product.inStock ? '<span style="color:green">有庫存</span>' : '<span style="color:red">無庫存</span>'}</div>
         ${product.sizes ? `<div>尺寸: ${product.sizes.join(', ')}</div>` : ''}
         ${product.color ? `<div>顏色: <span style="font-weight:bold">${product.color}</span></div>` : ''}
+        <div>欲購買數量: <span style="font-weight:bold">${product.quantity || 1}</span> 件</div>
         <div><a href="${product.url}" target="_blank">查看商品</a></div>
       `;
       
