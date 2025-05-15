@@ -109,8 +109,7 @@
   
   <div class="container">
     <button id="fetchProducts">查看監控商品</button>
-    
-    <div class="switch-container">
+      <div class="switch-container">
       <label class="switch">
         <input type="checkbox" id="monitorStockToggle">
         <span class="slider"></span>
@@ -122,6 +121,13 @@
         <span class="slider"></span>
       </label>
       <span class="switch-label">自動結帳</span>
+    </div>
+
+    <div class="setting-container" style="display: flex; align-items: center; margin-top: 10px; margin-bottom: 10px; padding: 5px; background-color: #f5f5f5; border-radius: 4px;">
+      <span style="margin-right: 10px; font-size: 14px;">監控刷新間隔：</span>
+      <input type="number" id="refreshIntervalInput" min="5" max="300" value="30" style="width: 60px; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+      <span style="margin-left: 5px; font-size: 14px;">秒</span>
+      <button id="saveRefreshInterval" style="margin-left: 10px; padding: 5px 10px; font-size: 12px;">儲存</button>
     </div>
     
     <div class="monitored-count" id="monitoredCount">監控中商品：0 件</div>

@@ -3,6 +3,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const fetchProductsBtn = document.getElementById('fetchProducts');
   const monitorStockToggle = document.getElementById('monitorStockToggle');
   const autoCheckoutToggle = document.getElementById('autoCheckoutToggle');
+  const refreshIntervalInput = document.getElementById('refreshIntervalInput');
+  const saveRefreshIntervalBtn = document.getElementById('saveRefreshInterval');
   const statusBox = document.getElementById('statusBox');
   const productList = document.getElementById('productList');
   const monitoredCount = document.getElementById('monitoredCount');
@@ -17,6 +19,7 @@ document.addEventListener('DOMContentLoaded', function() {
   fetchProductsBtn.addEventListener('click', viewMonitoredProducts);
   monitorStockToggle.addEventListener('change', toggleStockMonitoring);
   autoCheckoutToggle.addEventListener('change', toggleAutoCheckout);
+  saveRefreshIntervalBtn.addEventListener('click', saveRefreshInterval);
   
   // 從背景腳本接收訊息
   chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
@@ -74,10 +77,10 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-  
   // 切換庫存監控
   function toggleStockMonitoring() {
     const isMonitoring = monitorStockToggle.checked;
+    const refreshInterval = parseInt(refreshIntervalInput.value, 10) || 30;
     
     if (isMonitoring) {
       // 開始監控
@@ -85,11 +88,12 @@ document.addEventListener('DOMContentLoaded', function() {
         type: 'startMonitoring',
         settings: {
           isMonitoring: true,
-          autoCheckout: autoCheckoutToggle.checked
+          autoCheckout: autoCheckoutToggle.checked,
+          refreshInterval: refreshInterval
         }
       });
       
-      updateStatus('庫存監控已開始，監控間隔: 30秒');
+      updateStatus(`庫存監控已開始，將在當前頁面每 ${refreshInterval} 秒輪詢檢查庫存`);
     } else {
       // 停止監控
       chrome.runtime.sendMessage({type: 'stopMonitoring'});
@@ -122,8 +126,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
   }
-  
-  // 載入初始設定
+    // 載入初始設定
   function loadInitialSettings() {
     // 確保監控開關和自動結帳開關初始為關閉
     monitorStockToggle.checked = false;
@@ -132,7 +135,55 @@ document.addEventListener('DOMContentLoaded', function() {
     // 從背景腳本獲取實際的監控狀態
     updateSwitchStates();
     
+    // 載入刷新間隔設定
+    chrome.storage.sync.get('refreshInterval', function(data) {
+      if (data.refreshInterval) {
+        refreshIntervalInput.value = data.refreshInterval;
+      } else {
+        // 預設30秒
+        refreshIntervalInput.value = 30;
+        chrome.storage.sync.set({ refreshInterval: 30 });
+      }
+    });
+    
     updateStatus('系統已就緒，開關預設為關閉狀態');
+  }
+  
+  // 儲存刷新間隔設定
+  function saveRefreshInterval() {
+    const interval = parseInt(refreshIntervalInput.value, 10);
+    
+    // 確保輸入值在合理範圍內
+    if (isNaN(interval) || interval < 5) {
+      refreshIntervalInput.value = 5;
+      updateStatus('刷新間隔最小為5秒');
+      return;
+    }
+    
+    if (interval > 300) {
+      refreshIntervalInput.value = 300;
+      updateStatus('刷新間隔最大為300秒');
+      return;
+    }
+    
+    // 儲存新的刷新間隔設定
+    chrome.storage.sync.set({ refreshInterval: interval }, function() {
+      updateStatus(`監控刷新間隔已設定為 ${interval} 秒`);
+      
+      // 如果監控已開啟，通知所有頁面更新刷新間隔
+      if (monitorStockToggle.checked) {
+        chrome.tabs.query({}, function(tabs) {
+          for (let tab of tabs) {
+            chrome.tabs.sendMessage(tab.id, {
+              type: 'updateRefreshInterval',
+              interval: interval
+            }, function(response) {
+              // 忽略回應錯誤，有些頁面可能沒有內容腳本
+            });
+          }
+        });
+      }
+    });
   }
   
   // 更新狀態訊息

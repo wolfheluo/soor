@@ -42,17 +42,37 @@ function startMonitoring(settings) {
   
   isMonitoring = true;
   
+  // 保存監控狀態和設置
+  if (settings) {
+    autoCheckoutEnabled = settings.autoCheckout || false;
+    
+    // 儲存刷新間隔
+    if (settings.refreshInterval) {
+      chrome.storage.sync.set({ refreshInterval: settings.refreshInterval });
+    }
+  }
+  
   // 儲存監控狀態
   saveMonitoringState();
   
-  // 每30秒檢查一次庫存
-  monitoringInterval = setInterval(checkAllProductsStock, 30000);
+  // 獲取刷新間隔
+  const refreshInterval = settings?.refreshInterval || 30;
   
-  // 立即執行一次庫存檢查
-  checkAllProductsStock();
+  // 通知所有開啟的標籤頁開始監控
+  chrome.tabs.query({}, function(tabs) {
+    for (let tab of tabs) {
+      chrome.tabs.sendMessage(tab.id, {
+        type: 'startPageMonitoring',
+        autoCheckout: autoCheckoutEnabled,
+        refreshInterval: refreshInterval
+      }, function(response) {
+        // 忽略回應錯誤，有些頁面可能沒有內容腳本
+      });
+    }
+  });
   
   // 通知狀態更新
-  sendStatusUpdate('庫存監控已啟動');
+  sendStatusUpdate('庫存監控已啟動，當前頁面將進行輪詢刷新');
 }
 
 // 停止庫存監控
@@ -66,6 +86,17 @@ function stopMonitoring() {
   
   // 儲存監控狀態
   saveMonitoringState();
+  
+  // 通知所有開啟的標籤頁停止監控
+  chrome.tabs.query({}, function(tabs) {
+    for (let tab of tabs) {
+      chrome.tabs.sendMessage(tab.id, {
+        type: 'stopPageMonitoring'
+      }, function(response) {
+        // 忽略回應錯誤，有些頁面可能沒有內容腳本
+      });
+    }
+  });
   
   // 通知狀態更新
   sendStatusUpdate('庫存監控已停止');
@@ -104,47 +135,13 @@ function addProductToMonitor(product) {
 
 // 檢查所有產品庫存
 function checkAllProductsStock() {
-  // 先重新載入監控產品列表，確保使用最新資料
-  loadMonitoredProducts(function() {
-    if (!isMonitoring || monitoredProducts.length === 0) {
-      return;
-    }
-    
-    sendStatusUpdate(`開始檢查 ${monitoredProducts.length} 個產品的庫存狀態`);
-    
-    // 對每個產品，開啟標籤頁檢查庫存
-    monitoredProducts.forEach(product => {
-      checkProductStock(product);
-    });
-  });
+  // 已不再使用，保留為兼容舊版本
+  sendStatusUpdate(`監控方式已更新，使用頁面輪詢方式`);
 }
 
 // 檢查單個產品庫存
 function checkProductStock(product) {
-  // 創建一個隱藏的標籤頁
-  chrome.tabs.create({
-    url: product.url,
-    active: false
-  }, function(tab) {
-    // 等待頁面加載完成
-    chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
-      if (tabId === tab.id && info.status === 'complete') {
-        chrome.tabs.onUpdated.removeListener(listener);
-        
-        // 向內容腳本發送檢查庫存的請求
-        setTimeout(() => {
-          chrome.tabs.sendMessage(tab.id, {
-            type: 'checkStock',
-            product: product,
-            autoCheckout: autoCheckoutEnabled
-          }, function(response) {
-            // 關閉標籤頁
-            chrome.tabs.remove(tab.id);
-          });
-        }, 2000); // 等待2秒，確保頁面完全載入
-      }
-    });
-  });
+  // 已不再使用，保留為兼容舊版本
 }
 
 // 保存監控狀態
