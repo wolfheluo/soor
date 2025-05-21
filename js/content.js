@@ -419,6 +419,8 @@ function updateMonitoredProductsList() {
 // 檢查產品庫存
 async function checkProductStock(product, autoCheckout) {
   try {
+    console.log('檢查產品庫存:', product.url);
+    
     // 提取當前頁面的產品信息
     const currentProduct = await extractProductInfo();
     
@@ -431,16 +433,41 @@ async function checkProductStock(product, autoCheckout) {
       currentProduct.quantity = product.quantity;
     }
     
+    // 檢查 "Add to cart" 按鈕是否可用
+    const addToCartButton = document.querySelector('button[type="submit"][name="add"]');
+    let inStock = false;
+    
+    if (addToCartButton) {
+      // 檢查按鈕是否被禁用
+      inStock = !addToCartButton.disabled;
+      console.log('加入購物車按鈕狀態:', inStock ? '有庫存' : '缺貨');
+    } else {
+      // 如果找不到按鈕，嘗試其他方法確定庫存狀態
+      const soldOutText = document.querySelector('.sold-out, .product-out-of-stock, [data-stock-state="out"], [data-availability="soldOut"]');
+      inStock = !soldOutText;
+      console.log('通過文字判斷庫存狀態:', inStock ? '可能有庫存' : '可能缺貨');
+    }
+    
     // 更新產品信息
-    const updatedProduct = {...product, ...currentProduct};
+    const updatedProduct = {
+      ...product, 
+      ...currentProduct,
+      inStock: inStock
+    };
     
     // 發送庫存更新消息
     chrome.runtime.sendMessage({
       type: 'stockUpdate',
       product: updatedProduct,
-      inStock: updatedProduct.inStock,
+      inStock: inStock,
       autoCheckout: autoCheckout
     });
+    
+    // 如果有庫存且自動結帳已啟用，直接開始結帳流程
+    if (inStock && autoCheckout) {
+      console.log('產品有庫存且自動結帳已啟用，開始結帳流程');
+      initiateCheckout(updatedProduct);
+    }
     
     return {success: true, product: updatedProduct};
   } catch (error) {
@@ -453,6 +480,12 @@ async function checkProductStock(product, autoCheckout) {
 async function initiateCheckout(product) {
   try {
     console.log('開始自動結帳流程:', product);
+    
+    // 如果在購物車頁面，直接處理購物車
+    if (window.location.pathname.includes('/cart')) {
+      console.log('當前在購物車頁面，直接進行結帳');
+      return await handleCartPage();
+    }
     
     // 如果不在產品頁面，則導航到產品頁面
     if (!isProductPage()) {
@@ -494,8 +527,12 @@ async function initiateCheckout(product) {
     await wait(2000);
     
     // 檢查是否成功導航到結帳頁面
-    if (window.location.pathname.includes('/cart') || window.location.pathname.includes('/checkout')) {
-      console.log('已成功導航到結帳相關頁面:', window.location.pathname);
+    if (window.location.pathname.includes('/cart')) {
+      console.log('已成功導航到購物車頁面，現在處理購物車');
+      return await handleCartPage();
+    } else if (window.location.pathname.includes('/checkout')) {
+      console.log('已成功導航到結帳頁面');
+      return {success: true, message: '已成功導航到結帳頁面'};
     } else {
       console.log('可能未成功導航到結帳頁面，嘗試使用備份方法');
       // 備份方法：使用 proceedToCheckout 函數
@@ -591,9 +628,23 @@ function selectSize(size) {
 
 // 點擊"加入購物車"按鈕
 function clickAddToCart() {
-  // 尋找各種可能的"加入購物車"按鈕
+  // 首先嘗試使用用戶提供的精確選擇器
+  const specificAddToCartButton = document.querySelector('button[type="submit"][name="add"]');
+  
+  // 如果找到精確匹配的按鈕，優先使用
+  if (specificAddToCartButton) {
+    console.log('找到精確匹配的加入購物車按鈕');
+    if (!specificAddToCartButton.disabled) {
+      specificAddToCartButton.click();
+      return {success: true, message: '已點擊精確匹配的加入購物車按鈕'};
+    } else {
+      return {success: false, message: '精確匹配的加入購物車按鈕已被禁用，可能商品已售完'};
+    }
+  }
+  
+  // 如果沒有找到精確匹配，嘗試其他可能的選擇器
   const addToCartButton = document.querySelector(
-    'button[type="submit"][name="add"], button[name="add"], [data-add-to-cart], .add-to-cart, #AddToCart, .product-form__cart-submit, [data-button-action="add-to-cart"]'
+    'button[name="add"], [data-add-to-cart], .add-to-cart, #AddToCart, .product-form__cart-submit, [data-button-action="add-to-cart"]'
   );
   
   if (addToCartButton) {
@@ -612,6 +663,21 @@ function clickAddToCart() {
 function clickCheckoutButton() {
   // 尋找各種可能的"Checkout"按鈕或鏈接
   console.log('尋找結帳按鈕...');
+  
+  // 優先使用用戶提供的精確選擇器
+  const specificCheckoutButton = document.querySelector('a[href="/cart"]');
+  
+  if (specificCheckoutButton) {
+    console.log('找到精確匹配的結帳按鈕:', specificCheckoutButton);
+    try {
+      specificCheckoutButton.click();
+      // 直接使用連結導航
+      window.location.href = specificCheckoutButton.href;
+      return {success: true, message: '已點擊精確匹配的結帳按鈕'};
+    } catch (e) {
+      console.error('點擊精確匹配的結帳按鈕失敗:', e);
+    }
+  }
   
   // 優先查找明確標示為 "Checkout" 的連結
   const checkoutButtonText = document.evaluate(
@@ -712,6 +778,52 @@ function clickCheckoutButton() {
   }, 5000);
   
   return {success: true, message: '找不到結帳按鈕，正在導航到購物車頁面'};
+}
+
+// 處理購物車頁面
+async function handleCartPage() {
+  console.log('處理購物車頁面...');
+  
+  // 等待頁面加載
+  await wait(2000);
+  
+  // 尋找精確匹配的結帳按鈕
+  const checkoutButton = document.querySelector('input[type="submit"].checkout-btn[name="checkout"][value="Check Out"]');
+  
+  if (checkoutButton) {
+    console.log('找到精確匹配的 Check Out 按鈕');
+    try {
+      // 點擊結帳按鈕
+      checkoutButton.click();
+      return {success: true, message: '已點擊 Check Out 按鈕'};
+    } catch (e) {
+      console.error('點擊 Check Out 按鈕失敗:', e);
+      return {success: false, message: `點擊 Check Out 按鈕失敗: ${e.message}`};
+    }
+  } else {
+    console.log('找不到精確匹配的 Check Out 按鈕，嘗試其他選擇器');
+    
+    // 嘗試其他可能的選擇器
+    const alternativeButton = document.querySelector(
+      '[name="checkout"], .checkout-button, [type="submit"][value*="Check"], [type="submit"][value*="結帳"]'
+    );
+    
+    if (alternativeButton) {
+      console.log('找到替代的結帳按鈕');
+      try {
+        alternativeButton.click();
+        return {success: true, message: '已點擊替代的結帳按鈕'};
+      } catch (e) {
+        console.error('點擊替代的結帳按鈕失敗:', e);
+        return {success: false, message: `點擊替代的結帳按鈕失敗: ${e.message}`};
+      }
+    }
+    
+    // 如果仍找不到結帳按鈕，嘗試直接導航
+    console.log('找不到任何結帳按鈕，嘗試直接導航到結帳頁面');
+    window.location.href = '/checkout';
+    return {success: false, message: '找不到結帳按鈕，直接導航到結帳頁面'};
+  }
 }
 
 // 進入結帳頁面
@@ -1207,4 +1319,25 @@ function wait(ms) {
       }
     });
   }
+  
+  // 頁面完全載入後執行
+  window.addEventListener('load', function() {
+    // 檢查當前 URL 是否為購物車頁面
+    if (window.location.pathname.includes('/cart')) {
+      console.log('頁面載入完成，當前在購物車頁面');
+      
+      // 檢查自動結帳是否啟用
+      chrome.runtime.sendMessage({type: 'checkMonitoringStatus'}, function(response) {
+        if (response && response.autoCheckout) {
+          console.log('自動結帳已啟用，開始處理購物車頁面');
+          // 給頁面一些時間完全渲染
+          setTimeout(() => {
+            handleCartPage();
+          }, 1500);
+        } else {
+          console.log('自動結帳未啟用，不進行自動處理');
+        }
+      });
+    }
+  });
 })();
