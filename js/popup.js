@@ -76,8 +76,7 @@ document.addEventListener('DOMContentLoaded', function() {
         autoCheckoutToggle.checked = response.autoCheckout;
       }
     });
-  }
-  // 切換庫存監控
+  }  // 切換庫存監控
   function toggleStockMonitoring() {
     const isMonitoring = monitorStockToggle.checked;
     const refreshInterval = parseInt(refreshIntervalInput.value, 10) || 30;
@@ -93,7 +92,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       });
       
-      updateStatus(`庫存監控已開始，將在當前頁面每 ${refreshInterval} 秒輪詢檢查庫存`);
+      updateStatus(`庫存監控已開始，將依次訪問監控商品頁面進行檢查`);
     } else {
       // 停止監控
       chrome.runtime.sendMessage({type: 'stopMonitoring'});

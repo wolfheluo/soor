@@ -28,6 +28,13 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     // 處理產品被移除的事件
     loadMonitoredProducts();
     sendResponse({success: true});
+  } else if (message.type === 'navigateToNext') {
+    // 處理導航到下一個商品
+    if (isMonitoring) {
+      const nextIndex = (message.currentIndex + 1) % message.totalProducts;
+      navigateToNextProduct(nextIndex);
+    }
+    sendResponse({success: true});
   }
   
   // 回傳true表示將非同步回應
@@ -58,21 +65,18 @@ function startMonitoring(settings) {
   // 獲取刷新間隔
   const refreshInterval = settings?.refreshInterval || 30;
   
-  // 通知所有開啟的標籤頁開始監控
-  chrome.tabs.query({}, function(tabs) {
-    for (let tab of tabs) {
-      chrome.tabs.sendMessage(tab.id, {
-        type: 'startPageMonitoring',
-        autoCheckout: autoCheckoutEnabled,
-        refreshInterval: refreshInterval
-      }, function(response) {
-        // 忽略回應錯誤，有些頁面可能沒有內容腳本
-      });
+  // 載入監控產品並依次訪問
+  loadMonitoredProducts(function() {
+    if (monitoredProducts.length > 0) {
+      // 開始依次導航至監控商品頁面
+      navigateToNextProduct(0);
+    } else {
+      sendStatusUpdate('沒有設定監控商品，請先添加商品到監控列表');
     }
   });
   
   // 通知狀態更新
-  sendStatusUpdate('庫存監控已啟動，當前頁面將進行輪詢刷新');
+  sendStatusUpdate('庫存監控已啟動，將依次導航至監控商品頁面');
 }
 
 // 停止庫存監控
@@ -131,6 +135,88 @@ function addProductToMonitor(product) {
   
   // 通知狀態更新
   sendStatusUpdate(`已將產品添加到監控列表: ${product.name}`);
+}
+
+// 依次導航到監控商品頁面
+function navigateToNextProduct(index) {
+  if (!isMonitoring) return;
+  
+  if (index < monitoredProducts.length) {
+    const product = monitoredProducts[index];
+    
+    // 通知狀態更新
+    sendStatusUpdate(`正在檢查商品 (${index + 1}/${monitoredProducts.length}): ${product.name}`);
+    
+    // 在活躍標籤頁中打開商品URL
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      if (tabs.length > 0) {
+        chrome.tabs.update(tabs[0].id, {url: product.url}, function(tab) {
+          // 等待頁面加載完成
+          const checkPageLoaded = function(tabId, changeInfo) {
+            if (tabId === tab.id && changeInfo.status === 'complete') {
+              // 延遲後發送檢查庫存訊息，確保頁面元素已加載
+              setTimeout(function() {
+                chrome.tabs.sendMessage(tab.id, {
+                  type: 'startPageMonitoring',
+                  autoCheckout: autoCheckoutEnabled,
+                  refreshInterval: 30,
+                  isSequential: true,
+                  currentIndex: index,
+                  totalProducts: monitoredProducts.length
+                }, function(response) {
+                  // 忽略回應錯誤
+                });
+              }, 2000);
+              
+              // 移除事件監聽器
+              chrome.tabs.onUpdated.removeListener(checkPageLoaded);
+            }
+          };
+          
+          // 添加事件監聽器以偵測頁面載入完成
+          chrome.tabs.onUpdated.addListener(checkPageLoaded);
+        });
+      } else {
+        // 如果沒有活躍標籤頁，建立一個新的
+        chrome.tabs.create({url: product.url}, function(tab) {
+          // 等待頁面加載完成
+          const checkPageLoaded = function(tabId, changeInfo) {
+            if (tabId === tab.id && changeInfo.status === 'complete') {
+              // 延遲後發送檢查庫存訊息
+              setTimeout(function() {
+                chrome.tabs.sendMessage(tab.id, {
+                  type: 'startPageMonitoring',
+                  autoCheckout: autoCheckoutEnabled,
+                  refreshInterval: 30,
+                  isSequential: true,
+                  currentIndex: index,
+                  totalProducts: monitoredProducts.length
+                }, function(response) {
+                  // 忽略回應錯誤
+                });
+              }, 2000);
+              
+              // 移除事件監聽器
+              chrome.tabs.onUpdated.removeListener(checkPageLoaded);
+            }
+          };
+          
+          // 添加事件監聽器以偵測頁面載入完成
+          chrome.tabs.onUpdated.addListener(checkPageLoaded);
+        });
+      }
+    });
+  } else {
+    // 全部商品檢查完畢，重新開始循環
+    sendStatusUpdate('已完成所有監控商品的檢查，將重新開始檢查');
+    
+    // 如果仍在監控中，延遲後重新開始
+    if (isMonitoring) {
+      setTimeout(function() {
+        navigateToNextProduct(0);
+      }, 5000);
+    }
+  }
 }
 
 // 檢查所有產品庫存

@@ -37,9 +37,8 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     }).catch(error => {
       console.error('檢查庫存時出錯:', error);
       sendResponse({success: false, error: error.message});
-    });      return true; // 表示將非同步回應
-  } else if (message.type === 'startPageMonitoring') {
-    startPageMonitoring(message.autoCheckout, message.refreshInterval);
+    });      return true; // 表示將非同步回應  } else if (message.type === 'startPageMonitoring') {
+    startPageMonitoring(message.autoCheckout, message.refreshInterval, message.isSequential, message.currentIndex, message.totalProducts);
     sendResponse({success: true, message: '開始頁面監控'});
     return true;
   } else if (message.type === 'stopPageMonitoring') {
@@ -921,7 +920,7 @@ function createActionButtons() {
 }
 
 // 啟動當前頁面的監控
-function startPageMonitoring(enableAutoCheckout, interval) {
+function startPageMonitoring(enableAutoCheckout, interval, isSequential = false, currentIndex = 0, totalProducts = 0) {
   // 避免重複啟動
   if (isPageMonitoring) {
     stopPageMonitoring();
@@ -944,7 +943,7 @@ function startPageMonitoring(enableAutoCheckout, interval) {
   }
   
   // 創建或更新監控狀態指示器
-  createOrUpdateMonitoringIndicator(true);
+  createOrUpdateMonitoringIndicator(true, isSequential, currentIndex, totalProducts);
   
   // 開始監控當前頁面
   startMonitoringInterval();
@@ -1028,14 +1027,53 @@ async function checkCurrentPageStock() {
             }
           } else {
             console.log(`監控商品 ${currentProduct.name} 目前無庫存，繼續監控中...`);
-            
-            // 重新載入頁面以刷新庫存狀態
+          }
+          
+          // 檢查是否是序列化監控，如果是，通知背景腳本前往下一個商品
+          const indicator = document.getElementById('soorploom-monitor-indicator');
+          if (indicator && indicator.textContent.includes('/')) {
+            // 表示這是序列化監控
+            const matches = indicator.textContent.match(/（(\d+)\/(\d+)）/);
+            if (matches && matches.length === 3) {
+              const currentIndex = parseInt(matches[1], 10) - 1;
+              const totalProducts = parseInt(matches[2], 10);
+              
+              // 延遲後通知背景腳本前往下一個商品
+              setTimeout(() => {
+                chrome.runtime.sendMessage({
+                  type: 'navigateToNext',
+                  currentIndex: currentIndex,
+                  totalProducts: totalProducts
+                });
+              }, 3000);
+            }
+          } else {
+            // 不是序列化監控，重新載入頁面以刷新庫存狀態
             setTimeout(() => {
               window.location.reload();
             }, 1000);
           }
         } else {
           console.log('當前產品不在監控列表中');
+          
+          // 如果是序列化監控，也要繼續前往下一個
+          const indicator = document.getElementById('soorploom-monitor-indicator');
+          if (indicator && indicator.textContent.includes('/')) {
+            const matches = indicator.textContent.match(/（(\d+)\/(\d+)）/);
+            if (matches && matches.length === 3) {
+              const currentIndex = parseInt(matches[1], 10) - 1;
+              const totalProducts = parseInt(matches[2], 10);
+              
+              // 延遲後通知背景腳本前往下一個商品
+              setTimeout(() => {
+                chrome.runtime.sendMessage({
+                  type: 'navigateToNext',
+                  currentIndex: currentIndex,
+                  totalProducts: totalProducts
+                });
+              }, 3000);
+            }
+          }
         }
       });
     } 
@@ -1081,7 +1119,7 @@ async function checkCurrentPageStock() {
 }
 
 // 創建或更新監控狀態指示器
-function createOrUpdateMonitoringIndicator(isMonitoring) {
+function createOrUpdateMonitoringIndicator(isMonitoring, isSequential = false, currentIndex = 0, totalProducts = 0) {
   let indicator = document.getElementById('soorploom-monitor-indicator');
   
   if (!indicator) {
@@ -1102,7 +1140,11 @@ function createOrUpdateMonitoringIndicator(isMonitoring) {
   }
   
   if (isMonitoring) {
-    indicator.textContent = `🔄 庫存監控中...（${refreshIntervalSeconds} 秒刷新）`;
+    if (isSequential) {
+      indicator.textContent = `🔄 庫存監控中...（${currentIndex + 1}/${totalProducts}）`;
+    } else {
+      indicator.textContent = `🔄 庫存監控中...（${refreshIntervalSeconds} 秒刷新）`;
+    }
     indicator.style.backgroundColor = '#4CAF50';
     indicator.style.color = 'white';
   } else {
